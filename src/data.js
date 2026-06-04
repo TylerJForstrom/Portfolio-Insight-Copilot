@@ -23,6 +23,47 @@ window.COPILOT_DATA = {
       { symbol: "BND", shares: 45, costBasis: 72 }
     ]
   },
+  benchmarks: {
+    SPY: {
+      name: "S&P 500 ETF simulation benchmark",
+      price: 508.36,
+      previousClose: 511.09,
+      sourceIds: ["simulation-export", "benchmark-context"]
+    },
+    QQQ: {
+      name: "Nasdaq-100 ETF benchmark",
+      price: 489.18,
+      previousClose: 480.27,
+      sourceIds: ["benchmark-context", "tech-news"]
+    },
+    SCHD: {
+      name: "Dividend equity ETF benchmark",
+      price: 82.41,
+      previousClose: 82.14,
+      sourceIds: ["benchmark-context", "income-news"]
+    }
+  },
+  simulationReference: {
+    sourceProject: "Stock Market Simulation",
+    exportPath: "frontend/data/sample-run.js",
+    symbol: "SPY",
+    bars: 90,
+    seed: 42,
+    firstSimClose: 449.3,
+    previousSimClose: 511.09,
+    latestSimClose: 508.36,
+    latestVolume: 2984998,
+    simReturnPct: 13.1443,
+    inputReturnPct: 12.7877,
+    latestDailyMovePct: -0.5342,
+    annualizedVolatilityPct: 29.2819,
+    sharpeRatio: 1.34,
+    marketMaxDrawdownPct: 9.4365,
+    realismScore: 92,
+    adjustedRealismScore: 0.2,
+    leakageClass: "same_path",
+    predictiveness: 0.9981
+  },
   instruments: {
     AAPL: {
       name: "Apple Inc.",
@@ -126,16 +167,22 @@ window.COPILOT_DATA = {
   },
   sources: {
     "price-feed": {
-      title: "Mock consolidated price feed",
-      type: "Market data",
-      detail: "Contains current price, previous close, and calculated daily percentage move for each supported symbol.",
-      reliability: "Structured numeric input"
+      title: "Static demo price feed",
+      type: "Curated demo data",
+      detail: "Contains hand-curated current price, previous close, and calculated daily percentage move for the primary demo symbols.",
+      reliability: "High confidence within demo scope"
     },
-    "mock-price-model": {
-      title: "Deterministic mock price model",
-      type: "Demo market data",
-      detail: "Creates repeatable mock prices and daily movement for exchange-listed symbols without detailed quote data.",
-      reliability: "Prototype-only numeric input"
+    "simulation-export": {
+      title: "Stock Market Simulation export",
+      type: "Simulation data",
+      detail: "Compact summary from frontend/data/sample-run.js: 90-bar SPY simulation with close series, volume, volatility, Sharpe, drawdown, and realism diagnostics.",
+      reliability: "Simulation-backed demo input"
+    },
+    "simulation-estimate-model": {
+      title: "Simulation-backed listed-symbol estimate model",
+      type: "Simulation-calibrated estimate",
+      detail: "Creates repeatable price and daily movement estimates for exchange-listed symbols using listing type plus volatility and daily-move calibration from the Stock Market Simulation sample run.",
+      reliability: "Estimated demo input, not a live quote"
     },
     "symbol-directory": {
       title: "Exchange-listed ticker directory",
@@ -208,6 +255,12 @@ window.COPILOT_DATA = {
       type: "Portfolio construction",
       detail: "Diversified funds can reduce single-company risk, but they still reflect region, sector, currency, and rate exposures.",
       reliability: "Educational context"
+    },
+    "benchmark-context": {
+      title: "Static benchmark comparison note",
+      type: "Benchmark context",
+      detail: "Benchmark returns are included so the demo can compare portfolio movement without live market-data APIs. SPY uses the Stock Market Simulation sample export.",
+      reliability: "Estimated demo comparison input"
     }
   }
 };

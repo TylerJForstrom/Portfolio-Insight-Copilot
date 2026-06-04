@@ -1,16 +1,64 @@
 const data = window.COPILOT_DATA;
 const engine = window.COPILOT_ENGINE;
+const STORAGE_KEY = "portfolio-insight-copilot-demo-save";
+
+function readSavedPortfolio() {
+  try {
+    const raw = window.localStorage?.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed.holdings)) return null;
+    return {
+      ...parsed,
+      holdings: parsed.holdings.filter((holding) => holding && holding.symbol && Number(holding.shares) > 0)
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeSavedPortfolio(payload) {
+  try {
+    window.localStorage?.setItem(STORAGE_KEY, JSON.stringify(payload));
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function removeSavedPortfolio() {
+  try {
+    window.localStorage?.removeItem(STORAGE_KEY);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function formatSavedAt(value) {
+  if (!value) return "saved locally";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "saved locally";
+  return `saved ${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })} at ${date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+}
+
+const initialSavedPortfolio = readSavedPortfolio();
 
 const state = {
-  portfolioKey: "balanced",
-  holdings: engine.clonePortfolio(data.portfolios.balanced),
-  depth: "beginner",
+  portfolioKey: initialSavedPortfolio?.holdings.length ? "saved" : "balanced",
+  holdings: engine.clonePortfolio(initialSavedPortfolio?.holdings.length ? initialSavedPortfolio.holdings : data.portfolios.balanced),
+  depth: initialSavedPortfolio?.depth || "beginner",
+  benchmarkKey: initialSavedPortfolio?.benchmarkKey && data.benchmarks[initialSavedPortfolio.benchmarkKey]
+    ? initialSavedPortfolio.benchmarkKey
+    : "SPY",
   lastQuestion: "Why did my portfolio move today?",
   lastInsight: [],
   guardrailEvents: [],
   uploadIssues: [],
   builderMessage: "",
-  activeView: "insights"
+  saveMessage: initialSavedPortfolio?.holdings.length ? `Browser demo portfolio loaded (${formatSavedAt(initialSavedPortfolio.savedAt)}).` : "",
+  activeView: "insights",
+  showPromptPacket: false
 };
 
 const money = new Intl.NumberFormat("en-US", {
@@ -33,6 +81,20 @@ const percent = new Intl.NumberFormat("en-US", {
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+const depthDetails = {
+  beginner: {
+    label: "Beginner mode",
+    detail: "Plain-language explanation with the main driver, simple risk wording, and a short disclaimer."
+  },
+  investor: {
+    label: "Investor mode",
+    detail: "Adds weights, dollar impact, and retrieved driver detail for a more analytical portfolio view."
+  },
+  advisor: {
+    label: "Advisor mode",
+    detail: "Frames the explanation as attribution, source grounding, and risk-review language."
+  }
+};
 const tickerUniverse = Array.from(new Map([
   ...Object.entries(data.instruments).map(([symbol, instrument]) => [symbol, {
     symbol,
@@ -130,7 +192,7 @@ function buildInsight(model) {
     bullets.push(`Data quality check: ${symbols} has no retrieved company or market context, so the system uses a neutral placeholder instead of inventing a reason.`);
   }
 
-  bullets.push("This is an educational explanation based on mock data and retrieved context. It does not recommend buying, selling, or holding any security.");
+  bullets.push("This is an educational explanation based on curated demo records, simulation-backed estimates, and retrieved context. It does not recommend buying, selling, or holding any security.");
 
   return bullets;
 }
@@ -150,6 +212,37 @@ function renderSummary(model) {
   $("#sourceCoverage").className = model.sourceCoverage === 1 ? "positive" : "negative";
 }
 
+function renderBenchmark(model) {
+  const comparison = engine.buildBenchmarkComparison(data, model, state.benchmarkKey);
+  const diffText = `${comparison.differencePct >= 0 ? "+" : ""}${(comparison.differencePct * 100).toFixed(2)} pp`;
+  const diffClass = comparison.differencePct >= 0 ? "positive" : "negative";
+  $("#benchmarkDiff").textContent = diffText;
+  $("#benchmarkDiff").className = diffClass;
+  $("#benchmarkName").textContent = `${comparison.key}: ${comparison.name}`;
+  $("#benchmarkSummary").innerHTML = `
+    <p><strong>${escapeHtml(comparison.resultLabel)}.</strong> Portfolio return was ${signedPercent(comparison.portfolioReturnPct)} versus ${signedPercent(comparison.benchmarkReturnPct)} for ${escapeHtml(comparison.key)}.</p>
+    <small>SPY uses a Stock Market Simulation sample export; other benchmarks use static estimates so the website demo stays free.</small>
+  `;
+
+  const maxReturn = Math.max(Math.abs(comparison.portfolioReturnPct), Math.abs(comparison.benchmarkReturnPct), 0.001);
+  const portfolioWidth = Math.max((Math.abs(comparison.portfolioReturnPct) / maxReturn) * 100, 4);
+  const benchmarkWidth = Math.max((Math.abs(comparison.benchmarkReturnPct) / maxReturn) * 100, 4);
+  $("#benchmarkBars").innerHTML = [
+    { label: "Portfolio", value: comparison.portfolioReturnPct, width: portfolioWidth },
+    { label: comparison.key || "Benchmark", value: comparison.benchmarkReturnPct, width: benchmarkWidth }
+  ].map((row) => `
+    <div class="benchmark-row">
+      <div class="benchmark-label">
+        <strong>${escapeHtml(row.label)}</strong>
+        <span>${signedPercent(row.value)}</span>
+      </div>
+      <div class="bar-track" aria-label="${escapeHtml(row.label)} return">
+        <div class="bar-fill ${row.value >= 0 ? "positive-bar" : "negative-bar"}" style="width: ${row.width}%"></div>
+      </div>
+    </div>
+  `).join("");
+}
+
 function renderInsight(model) {
   const insight = buildInsight(model);
   state.lastInsight = insight;
@@ -165,7 +258,7 @@ function renderHoldings(model) {
     .map((holding) => {
       const moveClass = holding.dailyMove >= 0 ? "positive" : "negative";
       const supportLabel = holding.supportLevel === "basic-listed"
-        ? "<span class=\"basic-note\">Basic listed data</span>"
+        ? `<span class="basic-note">Simulation estimate - ${escapeHtml(holding.instrument.estimateConfidence || "Medium estimate confidence")}</span>`
         : holding.isSupported ? "" : "<span class=\"review-note\">Needs retrieval</span>";
       return `
         <tr>
@@ -188,6 +281,27 @@ function renderHoldings(model) {
       `;
     })
     .join("");
+}
+
+function renderControls() {
+  $$("[data-portfolio]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.portfolio === state.portfolioKey);
+  });
+  $$("[data-depth]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.depth === state.depth);
+  });
+  $$("[data-benchmark]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.benchmark === state.benchmarkKey);
+  });
+}
+
+function renderDepthExplainer() {
+  const detail = depthDetails[state.depth] || depthDetails.beginner;
+  $("#depthExplainer").innerHTML = `<strong>${escapeHtml(detail.label)}</strong><span>${escapeHtml(detail.detail)}</span>`;
+  $("#modeSummary").innerHTML = `
+    <strong>${escapeHtml(detail.label)}</strong>
+    <span>${escapeHtml(detail.detail)}</span>
+  `;
 }
 
 function renderWorkspaceTabs() {
@@ -327,7 +441,7 @@ function renderBuilderHoldings(model) {
         <td>
           <strong>${escapeHtml(holding.symbol)}</strong>
           <span>${escapeHtml(holding.instrument.name)}</span>
-          ${holding.supportLevel === "basic-listed" ? "<span class=\"basic-note\">Basic listed data</span>" : holding.isSupported ? "" : "<span class=\"review-note\">Needs retrieval</span>"}
+          ${holding.supportLevel === "basic-listed" ? `<span class="basic-note">Simulation estimate - ${escapeHtml(holding.instrument.estimateType || "Listed security")}</span>` : holding.isSupported ? "" : "<span class=\"review-note\">Needs retrieval</span>"}
         </td>
         <td>
           <input class="table-input" type="number" min="0" step="0.01" value="${escapeHtml(holding.shares)}" data-edit-symbol="${escapeHtml(holding.symbol)}" data-edit-field="shares" aria-label="${escapeHtml(holding.symbol)} shares" />
@@ -355,6 +469,23 @@ function renderRiskReview(model) {
   badge.textContent = review.level;
   badge.className = `badge risk-${review.level.toLowerCase().replace(/\s+/g, "-")}`;
   $("#riskSummary").innerHTML = `<p>${escapeHtml(review.summary)}</p>`;
+  $("#riskScore").textContent = `${review.score}/100`;
+  $("#riskScoreDetail").textContent = `${review.scoreLabel} demo score based on transparent curated and simulation-backed checks.`;
+  $("#riskFactors").innerHTML = review.factors.map((factor) => {
+    const width = factor.maxScore ? Math.max((factor.score / factor.maxScore) * 100, 4) : 4;
+    return `
+      <article class="risk-factor ${escapeHtml(factor.status)}">
+        <div class="risk-factor-heading">
+          <strong>${escapeHtml(factor.label)}</strong>
+          <span>${factor.score}/${factor.maxScore}</span>
+        </div>
+        <div class="factor-track" aria-label="${escapeHtml(factor.label)} score">
+          <div class="factor-fill" style="width: ${width}%"></div>
+        </div>
+        <p>${escapeHtml(factor.detail)}</p>
+      </article>
+    `;
+  }).join("");
   $("#riskList").innerHTML = review.risks.map((risk) => `
     <article class="risk-item ${escapeHtml(risk.severity)}">
       <span>${escapeHtml(risk.severity.toUpperCase())}</span>
@@ -375,6 +506,7 @@ function buildDemoReportText(model) {
   const insight = state.lastInsight.length ? state.lastInsight : buildInsight(model);
   const checks = engine.evaluateReadiness(model, state.guardrailEvents);
   const review = engine.buildRiskReview(model);
+  const comparison = engine.buildBenchmarkComparison(data, model, state.benchmarkKey);
   const topDriver = model.largestDriver
     ? `${model.largestDriver.symbol} (${signedMoney(model.largestDriver.dailyMove)})`
     : "No driver yet";
@@ -389,11 +521,19 @@ function buildDemoReportText(model) {
     `Daily move: ${signedMoney(model.dailyMove)} (${signedPercent(model.dailyMovePct)})`,
     `Top driver: ${topDriver}`,
     `Source coverage: ${percent.format(model.sourceCoverage)}`,
+    `Benchmark: ${comparison.key} - portfolio ${signedPercent(comparison.portfolioReturnPct)} versus benchmark ${signedPercent(comparison.benchmarkReturnPct)} (${comparison.resultLabel})`,
+    `Demo risk score: ${review.score}/100 (${review.scoreLabel})`,
     `Risk review: ${review.level} - ${review.summary}`,
+    `Explanation mode: ${depthDetails[state.depth]?.label || state.depth}`,
+    "",
+    "No-cost demo scope:",
+    "- Static frontend only; no backend, accounts, or paid APIs.",
+    "- Browser saves use localStorage on the viewer's device.",
+    "- Broad ticker estimates are calibrated from your Stock Market Simulation sample run.",
     "",
     "AI workflow:",
     "- Normalize holdings from presets, CSV, or manual ticker search.",
-    "- Retrieve rich mock company context or basic listed-security context.",
+    "- Retrieve curated company context or simulation-backed listed-symbol estimates.",
     "- Calculate attribution, concentration, source coverage, and risk flags.",
     "- Generate an educational explanation with citations.",
     "- Block buy/sell/hold advice and log the guardrail event.",
@@ -403,6 +543,9 @@ function buildDemoReportText(model) {
     "",
     "Readiness checks:",
     ...checks.map((check) => `- ${check.label}: ${check.status.toUpperCase()} - ${check.detail}`),
+    "",
+    "Risk score factors:",
+    ...review.factors.map((factor) => `- ${factor.label}: ${factor.score}/${factor.maxScore} - ${factor.detail}`),
     "",
     "Evidence used:",
     ...(sourceTitles.length ? sourceTitles.map((title) => `- ${title}`) : ["- No source cards available yet."])
@@ -433,6 +576,9 @@ function renderAudit(model) {
     null,
     2
   );
+  $("#promptPacket").hidden = !state.showPromptPacket;
+  $("#togglePromptPacket").setAttribute("aria-expanded", String(state.showPromptPacket));
+  $("#togglePromptPacket").textContent = state.showPromptPacket ? "Hide Prompt Packet" : "Show Prompt Packet";
 }
 
 function renderUploadStatus() {
@@ -460,6 +606,21 @@ function renderBuilderStatus() {
   }
 
   status.innerHTML = `<span>${escapeHtml(state.builderMessage)}</span>`;
+}
+
+function renderSaveStatus() {
+  const status = $("#saveStatus");
+  if (!status) return;
+
+  if (state.saveMessage) {
+    status.innerHTML = `<span>${escapeHtml(state.saveMessage)}</span>`;
+    return;
+  }
+
+  const saved = readSavedPortfolio();
+  status.innerHTML = saved?.holdings.length
+    ? `<span>Browser save available (${formatSavedAt(saved.savedAt)}).</span>`
+    : "<span>No browser save yet.</span>";
 }
 
 function renderAnswer(model, question, options = {}) {
@@ -495,6 +656,9 @@ function renderAnswer(model, question, options = {}) {
   if (lower.includes("risk") || lower.includes("concentration")) {
     const concentrated = [...model.holdings].sort((a, b) => b.weight - a.weight)[0];
     answer = `${concentrated.symbol} is the largest position at ${percent.format(concentrated.weight)} of the portfolio. Its main risk flag is: ${concentrated.instrument.risk}`;
+  } else if (lower.includes("benchmark")) {
+    const comparison = engine.buildBenchmarkComparison(data, model, state.benchmarkKey);
+    answer = `The portfolio returned ${signedPercent(comparison.portfolioReturnPct)} versus ${signedPercent(comparison.benchmarkReturnPct)} for ${comparison.key}. The difference is ${comparison.differencePct >= 0 ? "+" : ""}${(comparison.differencePct * 100).toFixed(2)} percentage points in this simulation-backed demo session.`;
   } else if (lower.includes("source") || lower.includes("citation")) {
     answer = `This explanation used ${model.sourceIds.length} retrieved source records across market data, news context, and risk notes. Source coverage is ${percent.format(model.sourceCoverage)} for the current holdings.`;
   } else if (lower.includes("unsupported") || lower.includes("missing")) {
@@ -521,10 +685,13 @@ function setActiveButton(selector, activeButton, dataKey) {
 
 function rerender() {
   const model = getPortfolioModel();
+  renderControls();
   renderWorkspaceTabs();
   renderTickerOptions();
   renderTickerSuggestions();
   renderSummary(model);
+  renderBenchmark(model);
+  renderDepthExplainer();
   renderInsight(model);
   renderHoldings(model);
   renderBuilderHoldings(model);
@@ -536,6 +703,7 @@ function rerender() {
   renderDemoReport(model);
   renderUploadStatus();
   renderBuilderStatus();
+  renderSaveStatus();
 }
 
 function switchView(view) {
@@ -571,6 +739,7 @@ function addManualHolding() {
   const wasMerge = state.holdings.some((holding) => String(holding.symbol).trim().toUpperCase() === normalizedSymbol);
   state.holdings = result.holdings;
   state.uploadIssues = [];
+  state.saveMessage = "Unsaved demo changes. Use Save Current to keep them in this browser.";
   state.builderMessage = wasMerge
     ? `${normalizedSymbol} updated in your portfolio.`
     : `${normalizedSymbol} added. You now have ${beforeCount + 1} holdings.`;
@@ -584,6 +753,7 @@ function addManualHolding() {
 
 function removeManualHolding(symbol) {
   state.holdings = engine.removeHolding(state.holdings, symbol);
+  state.saveMessage = "Unsaved demo changes. Use Save Current to keep them in this browser.";
   state.builderMessage = `${symbol} removed.`;
   state.lastQuestion = state.holdings.length
     ? "Why did my custom portfolio move today?"
@@ -597,6 +767,7 @@ function removeManualHolding(symbol) {
 function clearHoldings() {
   state.holdings = [];
   state.uploadIssues = [];
+  state.saveMessage = "Unsaved demo changes. Use Save Current to keep the empty portfolio in this browser.";
   state.builderMessage = "Portfolio cleared. Add a ticker to start fresh.";
   state.lastQuestion = "Why did my portfolio move today?";
   $("#questionInput").value = state.lastQuestion;
@@ -621,6 +792,7 @@ function updateBuilderHolding(symbol) {
   }
 
   state.holdings = result.holdings;
+  state.saveMessage = "Unsaved demo changes. Use Save Current to keep them in this browser.";
   state.builderMessage = `${symbol} updated.`;
   state.lastQuestion = "Why did my custom portfolio move today?";
   $("#questionInput").value = state.lastQuestion;
@@ -632,12 +804,59 @@ function updateBuilderHolding(symbol) {
 function loadDemoPortfolio() {
   state.holdings = engine.clonePortfolio(demoPortfolio);
   state.uploadIssues = [];
+  state.saveMessage = "Demo scenario loaded. Use Save Current to keep it in this browser.";
   state.builderMessage = "Demo portfolio loaded. Review the holdings table, risk notes, and basic listed-data labels.";
   state.lastQuestion = "What risks should I review in this demo portfolio?";
   $("#questionInput").value = state.lastQuestion;
   markAsCustomPortfolio();
   state.activeView = "builder";
   rerender();
+}
+
+function saveCurrentPortfolio() {
+  const savedAt = new Date().toISOString();
+  const saved = writeSavedPortfolio({
+    version: 1,
+    savedAt,
+    holdings: engine.clonePortfolio(state.holdings),
+    depth: state.depth,
+    benchmarkKey: state.benchmarkKey,
+    lastQuestion: state.lastQuestion
+  });
+
+  state.saveMessage = saved
+    ? `Saved current demo portfolio in this browser (${formatSavedAt(savedAt)}).`
+    : "Browser save failed. This browser may be blocking local storage.";
+  renderSaveStatus();
+}
+
+function loadSavedPortfolio() {
+  const saved = readSavedPortfolio();
+  if (!saved?.holdings.length) {
+    state.saveMessage = "No saved demo portfolio found in this browser.";
+    renderSaveStatus();
+    return;
+  }
+
+  state.holdings = engine.clonePortfolio(saved.holdings);
+  state.depth = saved.depth && depthDetails[saved.depth] ? saved.depth : state.depth;
+  state.benchmarkKey = saved.benchmarkKey && data.benchmarks[saved.benchmarkKey] ? saved.benchmarkKey : state.benchmarkKey;
+  state.lastQuestion = saved.lastQuestion || "Why did my saved portfolio move today?";
+  state.uploadIssues = [];
+  state.builderMessage = "Saved browser portfolio loaded.";
+  state.saveMessage = `Loaded browser demo portfolio (${formatSavedAt(saved.savedAt)}).`;
+  $("#questionInput").value = state.lastQuestion;
+  state.portfolioKey = "saved";
+  state.activeView = "builder";
+  rerender();
+}
+
+function clearSavedPortfolio() {
+  const removed = removeSavedPortfolio();
+  state.saveMessage = removed
+    ? "Browser save cleared. The current on-screen portfolio is unchanged."
+    : "Could not clear the browser save.";
+  renderSaveStatus();
 }
 
 function runGuardrailDemo() {
@@ -714,6 +933,7 @@ $$("[data-portfolio]").forEach((button) => {
     state.holdings = engine.clonePortfolio(data.portfolios[state.portfolioKey]);
     state.uploadIssues = [];
     state.builderMessage = "";
+    state.saveMessage = "Preset loaded. Use Save Current if you want this browser to remember it.";
     state.lastQuestion = "Why did my portfolio move today?";
     $("#questionInput").value = state.lastQuestion;
     setActiveButton("[data-portfolio]", button, "portfolio");
@@ -736,6 +956,13 @@ $$("[data-depth]").forEach((button) => {
   });
 });
 
+$$("[data-benchmark]").forEach((button) => {
+  button.addEventListener("click", () => {
+    state.benchmarkKey = button.dataset.benchmark;
+    rerender();
+  });
+});
+
 $("#askButton").addEventListener("click", () => {
   state.lastQuestion = $("#questionInput").value;
   const model = getPortfolioModel();
@@ -754,6 +981,14 @@ $("#questionInput").addEventListener("keydown", (event) => {
 
 $("#refreshInsight").addEventListener("click", rerender);
 $("#copyBriefing").addEventListener("click", copyBriefing);
+$("#togglePromptPacket").addEventListener("click", () => {
+  state.showPromptPacket = !state.showPromptPacket;
+  const model = getPortfolioModel();
+  renderAudit(model);
+});
+$("#savePortfolio").addEventListener("click", saveCurrentPortfolio);
+$("#loadSavedPortfolio").addEventListener("click", loadSavedPortfolio);
+$("#clearSavedPortfolio").addEventListener("click", clearSavedPortfolio);
 $("#loadDemoPortfolio").addEventListener("click", loadDemoPortfolio);
 $("#runGuardrailDemo").addEventListener("click", runGuardrailDemo);
 $("#copyDemoReport").addEventListener("click", copyDemoReport);
@@ -790,6 +1025,7 @@ $("#csvInput").addEventListener("change", async (event) => {
     }
     state.holdings = result.holdings;
     state.uploadIssues = result.issues;
+    state.saveMessage = "CSV imported. Use Save Current to keep this portfolio in this browser.";
     state.builderMessage = "CSV imported. You can still add or remove holdings manually.";
     state.lastQuestion = "Why did my uploaded portfolio move today?";
     $("#questionInput").value = state.lastQuestion;

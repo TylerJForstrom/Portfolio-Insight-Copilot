@@ -28,10 +28,22 @@
             <button class="segment" data-portfolio="income">Income</button>
           </div>
           <label class="file-drop">
-            <span>Upload mock CSV</span>
+            <span>Upload demo CSV</span>
             <input id="csvInput" type="file" accept=".csv,text/csv" />
           </label>
           <div id="uploadStatus" class="upload-status"></div>
+        </section>
+
+        <section class="control-section" aria-labelledby="saved-label">
+          <div class="section-heading">
+            <h2 id="saved-label">Browser Save</h2>
+          </div>
+          <div class="saved-actions" role="group" aria-label="Saved portfolio actions">
+            <button id="savePortfolio" class="secondary-button" type="button">Save Current</button>
+            <button id="loadSavedPortfolio" class="secondary-button" type="button">Load Saved</button>
+            <button id="clearSavedPortfolio" class="link-button" type="button">Clear</button>
+          </div>
+          <div id="saveStatus" class="upload-status"></div>
         </section>
 
         <section class="control-section" aria-labelledby="depth-label">
@@ -42,6 +54,18 @@
             <button class="segment active" data-depth="beginner">Beginner</button>
             <button class="segment" data-depth="investor">Investor</button>
             <button class="segment" data-depth="advisor">Advisor</button>
+          </div>
+          <div id="depthExplainer" class="mode-explainer"></div>
+        </section>
+
+        <section class="control-section" aria-labelledby="benchmark-label">
+          <div class="section-heading">
+            <h2 id="benchmark-label">Benchmark</h2>
+          </div>
+          <div class="segmented" role="group" aria-label="Benchmark comparison">
+            <button class="segment active" data-benchmark="SPY">SPY</button>
+            <button class="segment" data-benchmark="QQQ">QQQ</button>
+            <button class="segment" data-benchmark="SCHD">SCHD</button>
           </div>
         </section>
 
@@ -73,7 +97,7 @@
             <h2>Today's Portfolio Drivers</h2>
           </div>
           <div class="as-of">
-            <span>Mock market close</span>
+            <span>Static demo close</span>
             <strong>Jun 4, 2026</strong>
           </div>
         </header>
@@ -106,6 +130,38 @@
               <strong id="sourceCoverage">0%</strong>
               <small>Holding/news/context match</small>
             </article>
+            <article class="metric-card">
+              <span>Vs Benchmark</span>
+              <strong id="benchmarkDiff">0.00 pp</strong>
+              <small id="benchmarkName">SPY comparison</small>
+            </article>
+          </section>
+
+          <section class="content-grid benchmark-grid">
+            <article class="panel benchmark-card">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Benchmark comparison</p>
+                  <h3>Portfolio return versus selected benchmark</h3>
+                </div>
+              </div>
+              <div id="benchmarkSummary" class="benchmark-summary"></div>
+              <div id="benchmarkBars" class="benchmark-bars" aria-label="Benchmark comparison bars"></div>
+            </article>
+
+            <article class="panel scope-card">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">No-cost demo scope</p>
+                  <h3>Static, local, and website-ready</h3>
+                </div>
+              </div>
+              <div class="scope-list">
+                <span>Runs from index.html with no paid APIs.</span>
+                <span>Uses simulator-backed estimates and exchange listing files.</span>
+                <span>Saves demo portfolios only in this browser.</span>
+              </div>
+            </article>
           </section>
 
           <section class="content-grid">
@@ -120,6 +176,7 @@
                   <button id="copyBriefing" class="secondary-button" type="button">Copy Briefing</button>
                 </div>
               </div>
+              <div id="modeSummary" class="mode-summary"></div>
               <div id="insightBody" class="insight-body"></div>
               <div id="citationChips" class="citation-row" aria-label="Citations"></div>
             </article>
@@ -193,7 +250,11 @@
                 </div>
               </div>
               <div id="auditList" class="audit-list"></div>
-              <pre id="promptPacket" class="prompt-packet"></pre>
+              <div class="prompt-toggle-row">
+                <button id="togglePromptPacket" class="secondary-button" type="button" aria-expanded="false">Show Prompt Packet</button>
+                <span>Technical grounding payload for interviews</span>
+              </div>
+              <pre id="promptPacket" class="prompt-packet" hidden></pre>
             </article>
           </section>
         </section>
@@ -254,6 +315,14 @@
                 <span id="riskLevelBadge" class="badge">Review</span>
               </div>
               <div id="riskSummary" class="risk-summary"></div>
+              <div class="risk-score-card">
+                <div>
+                  <span>Demo risk score</span>
+                  <strong id="riskScore">0/100</strong>
+                </div>
+                <p id="riskScoreDetail">Add holdings to calculate a transparent score.</p>
+              </div>
+              <div id="riskFactors" class="risk-factor-list"></div>
               <div id="riskList" class="risk-list"></div>
               <div id="riskNextSteps" class="next-steps"></div>
             </article>
@@ -352,7 +421,7 @@
                   <strong id="demoRiskBadge">Review</strong>
                 </div>
               </div>
-              <p class="demo-note">The demo portfolio includes both rich mock context and basic listed-symbol context, so the app can discuss source quality without blocking real listed tickers.</p>
+              <p class="demo-note">The demo portfolio includes curated context and simulation-backed listed-symbol estimates, so the app can discuss source quality without blocking real listed tickers.</p>
             </article>
           </section>
 

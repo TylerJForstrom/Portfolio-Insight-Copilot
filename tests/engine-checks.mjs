@@ -28,6 +28,16 @@ assert.equal(balanced.sourceCoverage, 1);
 assert.ok(balanced.totalValue > 0);
 assert.ok(balanced.largestDriver.symbol);
 
+const balancedRiskScore = engine.calculateRiskScore(balanced);
+assert.equal(balancedRiskScore.maxScore, 100);
+assert.equal(balancedRiskScore.factors.length, 5);
+assert.ok(balancedRiskScore.score > 0);
+
+const benchmark = engine.buildBenchmarkComparison(data, balanced, "SPY");
+assert.equal(benchmark.key, "SPY");
+assert.match(benchmark.name, /simulation benchmark/);
+assert.equal(typeof benchmark.differencePct, "number");
+
 const duplicateCsv = [
   "Ticker,Quantity,Cost Basis",
   "aapl,1,10",
@@ -51,6 +61,11 @@ assert.equal(beyondMeat.sourceCoverage, 1);
 assert.equal(beyondMeat.unsupportedHoldings.length, 0);
 assert.equal(beyondMeat.basicListedHoldings[0].symbol, "BYND");
 assert.equal(beyondMeat.holdings[0].supportLevel, "basic-listed");
+assert.equal(typeof beyondMeat.holdings[0].instrument.estimateType, "string");
+assert.equal(beyondMeat.holdings[0].instrument.calibrationSymbol, "SPY");
+assert.equal(beyondMeat.holdings[0].instrument.calibrationRealismScore, 92);
+assert.equal(beyondMeat.sourceIds.includes("simulation-export"), true);
+assert.match(beyondMeat.holdings[0].instrument.risk, /estimate confidence/i);
 
 const websiteDemo = engine.createPortfolioModel(data, [
   { symbol: "SCHW", shares: 18, costBasis: 73 },
@@ -94,6 +109,8 @@ assert.equal(badEdit.issue, "Shares must be a positive number.");
 const concentratedRisk = engine.buildRiskReview(engine.createPortfolioModel(data, [{ symbol: "NVDA", shares: 10, costBasis: 900 }]));
 assert.equal(concentratedRisk.level, "High Review");
 assert.equal(concentratedRisk.risks.some((risk) => risk.label === "Single-holding concentration"), true);
+assert.equal(concentratedRisk.factors.some((factor) => factor.label === "Single-position size"), true);
+assert.ok(concentratedRisk.score < balancedRiskScore.score);
 
 assert.equal(engine.isAdviceRequest("Is NVDA a good investment?"), true);
 assert.equal(engine.isAdviceRequest("Why did my portfolio move today?"), false);
@@ -101,5 +118,9 @@ assert.equal(engine.isAdviceRequest("Why did my portfolio move today?"), false);
 const promptPacket = engine.buildPromptPacket(data, balanced, "advisor", "Why did it move?");
 assert.equal(promptPacket.policy.block.includes("buy/sell/hold recommendations"), true);
 assert.equal(promptPacket.holdings.every((holding) => holding.citations.length > 0), true);
+
+const readiness = engine.evaluateReadiness(beyondMeat, []);
+assert.equal(readiness.some((check) => check.label === "Estimate quality" && check.status === "review"), true);
+assert.match(readiness.find((check) => check.label === "Estimate quality").detail, /Stock Market Simulation/);
 
 console.log("engine checks passed");

@@ -57,15 +57,56 @@
     }, 0);
   }
 
-  function mockListedPrice(symbol) {
+  function securityProfile(listing) {
+    const name = String(listing?.name || "").toLowerCase();
+    const sector = String(listing?.sector || "").toLowerCase();
+
+    if (name.includes("warrant") || /\.w$/i.test(listing?.symbol || "")) {
+      return { label: "Warrant", base: 2, range: 18, beta: 2.1, confidence: "Lower estimate confidence" };
+    }
+
+    if (name.includes("preferred") || name.includes("depositary shares")) {
+      return { label: "Preferred or depositary share", base: 18, range: 42, beta: 0.35, confidence: "Medium estimate confidence" };
+    }
+
+    if (name.includes("note") || name.includes("bond")) {
+      return { label: "Income security", base: 20, range: 85, beta: 0.25, confidence: "Medium estimate confidence" };
+    }
+
+    if (sector.includes("etf") || name.includes(" etf") || name.includes(" fund")) {
+      return { label: "ETF or fund", base: 25, range: 180, beta: 0.85, confidence: "Medium estimate confidence" };
+    }
+
+    if (name.includes("american depositary") || name.includes("ads")) {
+      return { label: "ADR", base: 8, range: 110, beta: 1.15, confidence: "Medium estimate confidence" };
+    }
+
+    return { label: "Common stock", base: 12, range: 260, beta: 1.05, confidence: "Medium estimate confidence" };
+  }
+
+  function simulationBackedEstimate(data, symbol, listing) {
     const seed = symbolSeed(symbol);
-    const price = 8 + (seed % 240) + ((seed % 97) / 100);
-    const dayChangePct = ((seed % 49) - 24) / 10;
+    const profile = securityProfile(listing);
+    const reference = data.simulationReference || {};
+    const dailyVolPct = Number(reference.annualizedVolatilityPct || 24) / Math.sqrt(252);
+    const marketDailyPct = Number.isFinite(Number(reference.latestDailyMovePct))
+      ? Number(reference.latestDailyMovePct)
+      : 0;
+    const price = profile.base + (seed % profile.range) + ((seed % 97) / 100);
+    const idiosyncratic = (((seed % 101) - 50) / 50) * dailyVolPct * 0.65;
+    const rawChangePct = (marketDailyPct * profile.beta) + idiosyncratic;
+    const maxMove = Math.max(1.5, dailyVolPct * profile.beta * 2.5);
+    const dayChangePct = Math.max(Math.min(rawChangePct, maxMove), -maxMove);
     const previousClose = price / (1 + (dayChangePct / 100));
     return {
       price: Number(price.toFixed(2)),
       previousClose: Number(previousClose.toFixed(2)),
-      dayChangePct: Number(dayChangePct.toFixed(2))
+      dayChangePct: Number(dayChangePct.toFixed(2)),
+      estimateType: profile.label,
+      estimateConfidence: profile.confidence,
+      calibrationSymbol: reference.symbol || "SPY",
+      calibrationVolatilityPct: Number((reference.annualizedVolatilityPct || 0).toFixed?.(2) || reference.annualizedVolatilityPct || 0),
+      calibrationRealismScore: reference.realismScore
     };
   }
 
@@ -144,7 +185,7 @@
 
     const listing = listedSecurityFor(normalized);
     if (listing) {
-      const priceModel = mockListedPrice(normalized);
+      const priceModel = simulationBackedEstimate(data, normalized, listing);
       return {
         name: listing.name,
         sector: listing.sector || "Listed security",
@@ -152,10 +193,15 @@
         previousClose: priceModel.previousClose,
         dayChangePct: priceModel.dayChangePct,
         sectorMovePct: 0,
-        driver: `${listing.name} is covered by the local exchange-listed ticker directory. No company-specific news is attached, so the app uses basic listed-security context rather than inventing a market story.`,
-        risk: "Basic listed-security context: review real quotes, filings, liquidity, company news, and volatility before making any investment decision.",
-        sourceIds: ["mock-price-model", "symbol-directory", "generic-listed-context"],
-        supportLevel: "basic-listed"
+        driver: `${listing.name} is covered by the local exchange-listed ticker directory. The app uses a ${priceModel.estimateType.toLowerCase()} estimate calibrated from the Stock Market Simulation ${priceModel.calibrationSymbol} sample run and avoids inventing company-specific news.`,
+        risk: `${priceModel.estimateConfidence}: simulation-backed estimate only; review real quotes, filings, liquidity, company news, and volatility before making any investment decision.`,
+        sourceIds: ["simulation-estimate-model", "simulation-export", "symbol-directory", "generic-listed-context"],
+        supportLevel: "basic-listed",
+        estimateType: priceModel.estimateType,
+        estimateConfidence: priceModel.estimateConfidence,
+        calibrationSymbol: priceModel.calibrationSymbol,
+        calibrationVolatilityPct: priceModel.calibrationVolatilityPct,
+        calibrationRealismScore: priceModel.calibrationRealismScore
       };
     }
 
@@ -319,7 +365,7 @@
         status: model.sourceCoverage === 1 ? "pass" : "review",
         detail: model.sourceCoverage === 1
           ? model.basicListedHoldings.length
-            ? `${model.basicListedHoldings.length} holding(s) use basic listed-security context; detailed symbols use richer mock news context.`
+            ? `${model.basicListedHoldings.length} holding(s) use simulation-backed listed-symbol estimates; detailed symbols use curated demo context.`
             : "Every holding has mapped context."
           : `${model.unsupportedHoldings.length} holding(s) need external retrieval before investor-facing use.`
       },
@@ -339,8 +385,103 @@
         label: "Citation coverage",
         status: model.sourceIds.length > 0 ? "pass" : "review",
         detail: `${model.sourceIds.length} retrieved source record(s) attached.`
+      },
+      {
+        label: "Estimate quality",
+        status: model.basicListedHoldings.length ? "review" : "pass",
+        detail: model.basicListedHoldings.length
+          ? `${model.basicListedHoldings.map((holding) => holding.symbol).join(", ")} use Stock Market Simulation-calibrated estimates instead of curated quote records.`
+          : "All current holdings use curated static quote records."
       }
     ];
+  }
+
+  function scoreStatus(score, maxScore) {
+    const ratio = maxScore ? score / maxScore : 0;
+    if (ratio >= 0.75) return "pass";
+    if (ratio >= 0.4) return "review";
+    return "high";
+  }
+
+  function scoreFactor(label, score, maxScore, detail) {
+    return {
+      label,
+      score,
+      maxScore,
+      status: scoreStatus(score, maxScore),
+      detail
+    };
+  }
+
+  function calculateRiskScore(model) {
+    if (!model.holdings.length) {
+      const factors = [
+        scoreFactor("Holdings present", 0, 20, "Add holdings before the demo can evaluate portfolio shape."),
+        scoreFactor("Source grounding", 0, 20, "No holdings are available for source matching."),
+        scoreFactor("Concentration", 0, 25, "No position weights are available yet."),
+        scoreFactor("Sector exposure", 0, 20, "No sector weights are available yet."),
+        scoreFactor("Daily volatility", 0, 15, "No daily movement is available yet.")
+      ];
+      return { score: 0, maxScore: 100, label: "Start", factors };
+    }
+
+    const topHolding = [...model.holdings].sort((a, b) => b.weight - a.weight)[0];
+    const topSector = model.sectorAllocation[0];
+    const maxDailyMove = model.holdings.reduce((max, holding) => Math.max(max, Math.abs(holding.dailyMovePct)), 0);
+
+    const holdingsScore = model.holdings.length >= 6 ? 20 : model.holdings.length >= 4 ? 16 : model.holdings.length >= 2 ? 8 : 3;
+    const sourceScore = Math.round(model.sourceCoverage * 20);
+    const concentrationScore = topHolding.weight <= 0.25 ? 25 : topHolding.weight <= 0.35 ? 18 : topHolding.weight <= 0.5 ? 9 : 2;
+    const sectorScore = !topSector || topSector.weight <= 0.4 ? 20 : topSector.weight <= 0.5 ? 14 : topSector.weight <= 0.65 ? 7 : 2;
+    const volatilityScore = maxDailyMove <= 0.015 ? 15 : maxDailyMove <= 0.025 ? 11 : maxDailyMove <= 0.05 ? 6 : 2;
+
+    const factors = [
+      scoreFactor("Holdings mix", holdingsScore, 20, `${model.holdings.length} holding(s) are included in the current demo portfolio.`),
+      scoreFactor("Source grounding", sourceScore, 20, `${Math.round(model.sourceCoverage * 100)}% of holdings have listed or detailed source context.`),
+      scoreFactor("Single-position size", concentrationScore, 25, `${topHolding.symbol} is the largest position at ${Math.round(topHolding.weight * 100)}% of value.`),
+      scoreFactor("Sector exposure", sectorScore, 20, `${topSector?.sector || "No sector"} is the largest sector at ${Math.round((topSector?.weight || 0) * 100)}%.`),
+      scoreFactor("Daily volatility", volatilityScore, 15, `Largest absolute demo daily move is ${(maxDailyMove * 100).toFixed(2)}%.`)
+    ];
+    const score = factors.reduce((sum, factor) => sum + factor.score, 0);
+    const label = score >= 80 ? "Strong" : score >= 65 ? "Watch" : "Needs Review";
+
+    return { score, maxScore: 100, label, factors };
+  }
+
+  function buildBenchmarkComparison(data, model, benchmarkKey) {
+    const benchmarks = data.benchmarks || {};
+    const fallbackKey = benchmarks[benchmarkKey] ? benchmarkKey : Object.keys(benchmarks)[0];
+    const benchmark = benchmarks[fallbackKey];
+
+    if (!benchmark) {
+      return {
+        key: "",
+        name: "No benchmark",
+        portfolioReturnPct: model.dailyMovePct,
+        benchmarkReturnPct: 0,
+        differencePct: model.dailyMovePct,
+        resultLabel: "Benchmark data unavailable",
+        sourceIds: []
+      };
+    }
+
+    const benchmarkReturnPct = benchmark.previousClose
+      ? (benchmark.price - benchmark.previousClose) / benchmark.previousClose
+      : 0;
+    const differencePct = model.dailyMovePct - benchmarkReturnPct;
+    const resultLabel = differencePct >= 0
+      ? `Ahead by ${(differencePct * 100).toFixed(2)} percentage points`
+      : `Behind by ${Math.abs(differencePct * 100).toFixed(2)} percentage points`;
+
+    return {
+      key: fallbackKey,
+      name: benchmark.name,
+      portfolioReturnPct: model.dailyMovePct,
+      benchmarkReturnPct,
+      differencePct,
+      resultLabel,
+      sourceIds: benchmark.sourceIds || []
+    };
   }
 
   function buildRiskReview(model) {
@@ -348,10 +489,14 @@
     const nextSteps = [];
     const topHolding = [...model.holdings].sort((a, b) => b.weight - a.weight)[0];
     const topSector = model.sectorAllocation[0];
+    const riskScore = calculateRiskScore(model);
 
     if (!model.holdings.length) {
       return {
         level: "Start",
+        score: riskScore.score,
+        scoreLabel: riskScore.label,
+        factors: riskScore.factors,
         summary: "Add at least one holding to generate a portfolio risk review.",
         risks: [
           {
@@ -414,7 +559,7 @@
       risks.push({
         label: "Higher daily volatility",
         severity: "review",
-        detail: `${volatileHoldings.map((holding) => holding.symbol).join(", ")} moved more than 2.5% in the mock session.`
+        detail: `${volatileHoldings.map((holding) => holding.symbol).join(", ")} moved more than 2.5% in the simulation-backed demo session.`
       });
       nextSteps.push("Check whether larger daily swings match the investor's risk tolerance.");
     }
@@ -429,7 +574,7 @@
 
     if (!risks.length) {
       risks.push({
-        label: "No major mock-data risk flags",
+        label: "No major static-data risk flags",
         severity: "pass",
         detail: "No single holding or sector exceeded the review thresholds in this demo dataset."
       });
@@ -441,11 +586,14 @@
 
     return {
       level: hasHigh ? "High Review" : hasReview ? "Review" : "Balanced",
+      score: riskScore.score,
+      scoreLabel: riskScore.label,
+      factors: riskScore.factors,
       summary: hasHigh
-        ? "The mock AI review found concentration or grounding issues that deserve attention before treating the portfolio as balanced."
+        ? "The demo AI review found concentration or grounding issues that deserve attention before treating the portfolio as balanced."
         : hasReview
-          ? "The mock AI review found items to review, but no single issue automatically means the portfolio is unsuitable."
-          : "The mock AI review did not find major concentration flags in the current demo data.",
+          ? "The demo AI review found items to review, but no single issue automatically means the portfolio is unsuitable."
+          : "The demo AI review did not find major concentration flags in the current data.",
       risks,
       nextSteps
     };
@@ -503,6 +651,8 @@
     removeHolding,
     updateHolding,
     buildRiskReview,
+    calculateRiskScore,
+    buildBenchmarkComparison,
     isAdviceRequest,
     evaluateReadiness,
     buildPromptPacket,

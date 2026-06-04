@@ -3,9 +3,15 @@
 - App opens from `index.html` without installing dependencies.
 - Preset portfolio buttons update holdings and metrics.
 - Explanation depth buttons change the generated summary.
+- Explanation depth controls show the selected mode summary.
+- Benchmark selector updates the benchmark metric and comparison panel.
 - The Ask box explains movement, risk, and source coverage.
+- The Ask box can answer benchmark comparison questions.
 - Buy/sell/hold questions trigger the advice guardrail.
 - CSV upload accepts `symbol,shares,costBasis`.
+- Save Current stores the demo portfolio in browser `localStorage`.
+- Load Saved restores holdings, explanation depth, benchmark, and last question from browser storage.
+- Clear removes the browser save without changing the on-screen portfolio.
 - Manual ticker search shows supported symbols and lets users add holdings without a CSV.
 - Manual ticker search includes a broad ticker universe, including TSLA/Tesla.
 - Manual ticker search is generated from exchange listing files and includes BYND/Beyond Meat.
@@ -16,14 +22,18 @@
 - Build Portfolio tab shows editable shares and cost basis fields.
 - Edited holdings update current value, weights, insights, and risk review.
 - AI risk review flags concentration, limited diversification, missing context, and volatility.
+- AI risk review shows a transparent 0-100 demo score and factor breakdown.
 - Source chips scroll to matching retrieved source cards.
 - Daily move equals current value minus previous-close value.
 - Attribution bars sort holdings by absolute dollar impact.
 - AI readiness checks flag unsupported symbols and concentration review cases.
+- AI readiness shows estimate-quality language for Stock Market Simulation-backed listed-symbol estimates.
+- Prompt packet is hidden by default and opens only through `Show Prompt Packet`.
 - Prompt packet includes policy boundaries and citations for every mapped holding.
 - Demo Guide tab appears next to Insights and Build Portfolio.
 - Load Demo Portfolio fills the builder with SCHW, TSLA, AAPL, BYND, and BND.
 - Demo Guide report preview updates with live value, driver, risk, readiness, and evidence details.
+- Demo Guide report includes benchmark comparison, risk-score factors, and no-cost static demo scope.
 - Run Guardrail Example opens Insights and shows the buy/sell/hold advice boundary.
 - Copy Demo Report copies a recruiter-friendly report without requiring an API key.
 - Engine tests pass with `node tests/engine-checks.mjs`.
