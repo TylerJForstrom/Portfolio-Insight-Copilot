@@ -1,0 +1,31 @@
+# Validation Checklist
+
+- App opens from `index.html` without installing dependencies.
+- Preset portfolio buttons update holdings and metrics.
+- Explanation depth buttons change the generated summary.
+- The Ask box explains movement, risk, and source coverage.
+- Buy/sell/hold questions trigger the advice guardrail.
+- CSV upload accepts `symbol,shares,costBasis`.
+- Manual ticker search shows supported symbols and lets users add holdings without a CSV.
+- Manual ticker search includes a broad ticker universe, including TSLA/Tesla.
+- Manual ticker search is generated from exchange listing files and includes BYND/Beyond Meat.
+- Less prominent exchange-listed tickers use basic listed data instead of showing `Needs retrieval`.
+- Unknown valid-looking tickers show a custom ticker fallback instead of blocking entry.
+- Manual duplicate ticker adds merge shares and weighted cost basis.
+- Holdings can be removed or cleared after manual entry.
+- Build Portfolio tab shows editable shares and cost basis fields.
+- Edited holdings update current value, weights, insights, and risk review.
+- AI risk review flags concentration, limited diversification, missing context, and volatility.
+- Source chips scroll to matching retrieved source cards.
+- Daily move equals current value minus previous-close value.
+- Attribution bars sort holdings by absolute dollar impact.
+- AI readiness checks flag unsupported symbols and concentration review cases.
+- Prompt packet includes policy boundaries and citations for every mapped holding.
+- Demo Guide tab appears next to Insights and Build Portfolio.
+- Load Demo Portfolio fills the builder with SCHW, TSLA, AAPL, BYND, and BND.
+- Demo Guide report preview updates with live value, driver, risk, readiness, and evidence details.
+- Run Guardrail Example opens Insights and shows the buy/sell/hold advice boundary.
+- Copy Demo Report copies a recruiter-friendly report without requiring an API key.
+- Engine tests pass with `node tests/engine-checks.mjs`.
+- Ticker universe tests pass with `node tests/ticker-universe-checks.mjs`.
+- UI demo checks pass with `node tests/ui-demo-checks.mjs`.
