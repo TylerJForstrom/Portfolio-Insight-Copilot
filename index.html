@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Portfolio Insight Copilot</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Portfolio controls">
+        <div class="brand-lockup">
+          <div class="mark" aria-hidden="true">PI</div>
+          <div>
+            <p class="eyebrow">AI portfolio explanations</p>
+            <h1>Portfolio Insight Copilot</h1>
+          </div>
+        </div>
+
+        <section class="control-section" aria-labelledby="portfolio-label">
+          <div class="section-heading">
+            <h2 id="portfolio-label">Portfolio</h2>
+            <span id="portfolioCount" class="badge">5 holdings</span>
+          </div>
+          <div class="segmented" role="group" aria-label="Portfolio presets">
+            <button class="segment active" data-portfolio="balanced">Balanced</button>
+            <button class="segment" data-portfolio="growth">Growth</button>
+            <button class="segment" data-portfolio="income">Income</button>
+          </div>
+          <label class="file-drop">
+            <span>Upload mock CSV</span>
+            <input id="csvInput" type="file" accept=".csv,text/csv" />
+          </label>
+          <div id="uploadStatus" class="upload-status"></div>
+        </section>
+
+        <section class="control-section" aria-labelledby="depth-label">
+          <div class="section-heading">
+            <h2 id="depth-label">Explanation Depth</h2>
+          </div>
+          <div class="segmented" role="group" aria-label="Explanation depth">
+            <button class="segment active" data-depth="beginner">Beginner</button>
+            <button class="segment" data-depth="investor">Investor</button>
+            <button class="segment" data-depth="advisor">Advisor</button>
+          </div>
+        </section>
+
+        <section class="control-section" aria-labelledby="guardrail-label">
+          <div class="section-heading">
+            <h2 id="guardrail-label">Guardrails</h2>
+          </div>
+          <div class="guardrail-list">
+            <div class="guardrail-item">
+              <span class="status-dot good"></span>
+              <span>Educational only</span>
+            </div>
+            <div class="guardrail-item">
+              <span class="status-dot good"></span>
+              <span>Citations required</span>
+            </div>
+            <div class="guardrail-item">
+              <span class="status-dot good"></span>
+              <span>No buy/sell advice</span>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Account Summary prototype</p>
+            <h2>Today's Portfolio Drivers</h2>
+          </div>
+          <div class="as-of">
+            <span>Mock market close</span>
+            <strong>Jun 4, 2026</strong>
+          </div>
+        </header>
+
+        <nav class="workspace-tabs" aria-label="Workspace views">
+          <button class="workspace-tab active" type="button" data-view="insights">Insights</button>
+          <button class="workspace-tab" type="button" data-view="builder">Build Portfolio</button>
+          <button class="workspace-tab" type="button" data-view="demo">Demo Guide</button>
+        </nav>
+
+        <section id="insightsView" class="view-panel active" data-view-panel="insights">
+          <section class="summary-grid" aria-label="Portfolio summary">
+            <article class="metric-card">
+              <span>Total Value</span>
+              <strong id="totalValue">$0</strong>
+              <small id="totalCost">Cost basis $0</small>
+            </article>
+            <article class="metric-card">
+              <span>Today's Move</span>
+              <strong id="dailyMove">$0</strong>
+              <small id="dailyMovePct">0.00%</small>
+            </article>
+            <article class="metric-card">
+              <span>Largest Driver</span>
+              <strong id="largestDriver">--</strong>
+              <small id="largestDriverDetail">Awaiting data</small>
+            </article>
+            <article class="metric-card">
+              <span>Source Coverage</span>
+              <strong id="sourceCoverage">0%</strong>
+              <small>Holding/news/context match</small>
+            </article>
+          </section>
+
+          <section class="content-grid">
+            <article class="panel insight-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Generated explanation</p>
+                  <h3>What changed and why</h3>
+                </div>
+                <div class="panel-actions">
+                  <button id="refreshInsight" class="secondary-button" type="button">Refresh</button>
+                  <button id="copyBriefing" class="secondary-button" type="button">Copy Briefing</button>
+                </div>
+              </div>
+              <div id="insightBody" class="insight-body"></div>
+              <div id="citationChips" class="citation-row" aria-label="Citations"></div>
+            </article>
+
+            <article class="panel ask-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Ask the copilot</p>
+                  <h3>Question the portfolio</h3>
+                </div>
+              </div>
+              <div class="prompt-row">
+                <input id="questionInput" type="text" value="Why did my portfolio move today?" aria-label="Ask a question" />
+                <button id="askButton">Ask</button>
+              </div>
+              <div id="answerBox" class="answer-box"></div>
+            </article>
+          </section>
+
+          <section class="content-grid lower-grid">
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Holdings</p>
+                  <h3>Movement breakdown</h3>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Symbol</th>
+                      <th>Value</th>
+                      <th>Today</th>
+                      <th>Driver</th>
+                      <th>Risk Flag</th>
+                    </tr>
+                  </thead>
+                  <tbody id="holdingsTable"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Evidence</p>
+                  <h3>Retrieved sources</h3>
+                </div>
+              </div>
+              <div id="sourceList" class="source-list"></div>
+            </article>
+          </section>
+
+          <section class="content-grid review-grid">
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Attribution</p>
+                  <h3>Drivers by dollar impact</h3>
+                </div>
+              </div>
+              <div id="attributionBars" class="attribution-bars"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">AI readiness</p>
+                  <h3>Grounding and safety packet</h3>
+                </div>
+              </div>
+              <div id="auditList" class="audit-list"></div>
+              <pre id="promptPacket" class="prompt-packet"></pre>
+            </article>
+          </section>
+        </section>
+
+        <section id="builderView" class="view-panel" data-view-panel="builder">
+          <section class="builder-hero panel">
+            <div>
+              <p class="eyebrow">Portfolio builder</p>
+              <h3>Build, edit, and risk-check your portfolio</h3>
+              <p class="helper-copy">Add tickers manually, adjust shares or cost basis, remove holdings, then review possible risks before switching back to insights.</p>
+            </div>
+            <div class="builder-hero-stat">
+              <span>Current holdings</span>
+              <strong id="builderHoldingCount">0</strong>
+            </div>
+          </section>
+
+          <section class="content-grid builder-grid">
+            <article class="panel builder-card">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Add holding</p>
+                  <h3>Search ticker symbols</h3>
+                </div>
+                <span id="builderMode" class="badge warm">Manual</span>
+              </div>
+              <div class="manual-form">
+                <label class="form-field">
+                  <span>Ticker</span>
+                  <input id="tickerSearch" type="search" list="tickerOptions" placeholder="Search AAPL, SCHW..." autocomplete="off" />
+                  <datalist id="tickerOptions"></datalist>
+                </label>
+                <div class="input-pair">
+                  <label class="form-field">
+                    <span>Shares</span>
+                    <input id="sharesInput" type="number" min="0" step="0.01" placeholder="10" />
+                  </label>
+                  <label class="form-field">
+                    <span>Cost Basis</span>
+                    <input id="costBasisInput" type="number" min="0" step="0.01" placeholder="optional" />
+                  </label>
+                </div>
+                <button id="addHolding" class="primary-button" type="button">Add Holding</button>
+              </div>
+              <div id="tickerSuggestions" class="ticker-suggestions" aria-label="Ticker suggestions"></div>
+              <div class="builder-actions">
+                <button id="clearHoldings" class="link-button" type="button">Clear holdings</button>
+              </div>
+              <div id="builderStatus" class="builder-status" role="status"></div>
+            </article>
+
+            <article class="panel risk-card">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">AI risk review</p>
+                  <h3>Possible risks to review</h3>
+                </div>
+                <span id="riskLevelBadge" class="badge">Review</span>
+              </div>
+              <div id="riskSummary" class="risk-summary"></div>
+              <div id="riskList" class="risk-list"></div>
+              <div id="riskNextSteps" class="next-steps"></div>
+            </article>
+          </section>
+
+          <section class="panel builder-table-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Manage holdings</p>
+                <h3>Edit shares, cost basis, or remove a holding</h3>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="builder-table">
+                <thead>
+                  <tr>
+                    <th>Symbol</th>
+                    <th>Shares</th>
+                    <th>Cost Basis</th>
+                    <th>Current Value</th>
+                    <th>Weight</th>
+                    <th>Risk Note</th>
+                    <th>Manage</th>
+                  </tr>
+                </thead>
+                <tbody id="builderHoldingsTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section id="demoView" class="view-panel" data-view-panel="demo">
+          <section class="demo-hero panel">
+            <div>
+              <p class="eyebrow">Website demo</p>
+              <h3>Show the project clearly in under two minutes</h3>
+              <p class="helper-copy">Use this guided scenario to demonstrate portfolio building, listed-symbol coverage, cited AI explanations, risk review, and financial-advice guardrails.</p>
+            </div>
+            <div class="demo-actions" aria-label="Demo actions">
+              <button id="loadDemoPortfolio" class="primary-button" type="button">Load Demo Portfolio</button>
+              <button id="runGuardrailDemo" class="secondary-button" type="button">Run Guardrail Example</button>
+              <button id="copyDemoReport" class="secondary-button" type="button">Copy Demo Report</button>
+            </div>
+          </section>
+
+          <section class="content-grid demo-grid">
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Sample scenario</p>
+                  <h3>Mixed Schwab-style portfolio</h3>
+                </div>
+              </div>
+              <div class="scenario-list" aria-label="Demo portfolio holdings">
+                <div class="scenario-row">
+                  <strong>SCHW</strong>
+                  <span>Detailed company context and financial-services risk note</span>
+                </div>
+                <div class="scenario-row">
+                  <strong>TSLA</strong>
+                  <span>Exchange-listed symbol using basic listed-security coverage</span>
+                </div>
+                <div class="scenario-row">
+                  <strong>AAPL</strong>
+                  <span>Detailed market driver and citation-backed explanation</span>
+                </div>
+                <div class="scenario-row">
+                  <strong>BYND</strong>
+                  <span>Less-prominent listed ticker proving broad search coverage</span>
+                </div>
+                <div class="scenario-row">
+                  <strong>BND</strong>
+                  <span>ETF position that adds portfolio diversification context</span>
+                </div>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Live demo state</p>
+                  <h3>What the app will show</h3>
+                </div>
+              </div>
+              <div class="demo-score-grid" aria-label="Demo state summary">
+                <div class="demo-score">
+                  <span>Top driver</span>
+                  <strong id="demoTopDriver">--</strong>
+                </div>
+                <div class="demo-score">
+                  <span>Coverage</span>
+                  <strong id="demoCoverage">0%</strong>
+                </div>
+                <div class="demo-score">
+                  <span>Risk level</span>
+                  <strong id="demoRiskBadge">Review</strong>
+                </div>
+              </div>
+              <p class="demo-note">The demo portfolio includes both rich mock context and basic listed-symbol context, so the app can discuss source quality without blocking real listed tickers.</p>
+            </article>
+          </section>
+
+          <section class="content-grid demo-grid">
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">AI workflow</p>
+                  <h3>What your resume should highlight</h3>
+                </div>
+              </div>
+              <div class="demo-flow" aria-label="AI workflow">
+                <div class="flow-step">
+                  <strong>1. Input</strong>
+                  <span>Preset, CSV, or manual holdings</span>
+                </div>
+                <div class="flow-step">
+                  <strong>2. Retrieval</strong>
+                  <span>Company, price, source, and listing context</span>
+                </div>
+                <div class="flow-step">
+                  <strong>3. Math</strong>
+                  <span>Attribution, exposure, and coverage checks</span>
+                </div>
+                <div class="flow-step">
+                  <strong>4. Explain</strong>
+                  <span>Depth-aware summary with citations</span>
+                </div>
+                <div class="flow-step">
+                  <strong>5. Guardrail</strong>
+                  <span>Blocks buy, sell, and hold advice</span>
+                </div>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Export</p>
+                  <h3>Demo report preview</h3>
+                </div>
+              </div>
+              <pre id="demoReportPreview" class="report-preview"></pre>
+            </article>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="src/data.js"></script>
+    <script src="src/ticker-universe.js"></script>
+    <script src="src/engine.js"></script>
+    <script src="src/app.js"></script>
+  </body>
+</html>
